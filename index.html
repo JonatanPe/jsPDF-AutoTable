@@ -1,3 +1,30 @@
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: rgba(193, 193, 193, 1);
+    }
+
+    .menu {
+        position: absolute;
+        top: 0;
+        background: #e74c3c;
+        border-bottom: 8px solid #c0392b;
+        padding: 0;
+        margin: 0;
+        white-space: nowrap;
+        list-style: none;
+        width: 100%;
+        overflow: scroll;
+        height: 50px;
+    }
+</style>
+<ul class="menu"></ul>
 <script>
     window.onload = function () {
         var isLocal = /^(?:file):/, xmlHttp = new XMLHttpRequest();
