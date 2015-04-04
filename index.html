@@ -27,35 +27,15 @@
 <ul class="menu"></ul>
 <script>
     window.onload = function () {
-        var isLocal = /^(?:file):/, xmlHttp = new XMLHttpRequest();
+        var xmlHttp = new XMLHttpRequest();
 
-        xmlHttp.onreadystatechange = function () {
-
-            if (isLocal.test(location.href)) {
-                console.error("Can't do local");
-                return;
-            }
-
-            if (xmlHttp.readyState !== 4 || !xmlHttp.responseText) {
-                return;
-            }
-
-            document.open();
+        xmlHttp.onload = function () {
             var resp = xmlHttp.responseText;
             resp = resp.replace(/src=\"/gi, 'src="bower_components/jspdf-autotable/examples/');
             document.write(resp);
-            document.close();
-
-            var arr = document.getElementById("page").getElementsByTagName('script');
-            for (var n = 0; n < arr.length; n++)
-                eval(arr[n].innerHTML);
         };
 
-        try {
-            xmlHttp.open("GET", "bower_components/jspdf-autotable/examples/examples.html", true);
-            xmlHttp.send();
-        } catch (err) {
-            console.error("Couldn't do http request")
-        }
+        xmlHttp.open("GET", "bower_components/jspdf-autotable/examples/examples.html", true);
+        xmlHttp.send();
     }
 </script>
