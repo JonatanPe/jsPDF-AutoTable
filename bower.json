@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "name": "jsPDF AutoTable Example site",
+  "dependencies": {
+    "jspdf-autotable": "~1.2.0"
+  }
+}
