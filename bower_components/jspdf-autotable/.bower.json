@@ -15,11 +15,11 @@
   ],
   "license": "MIT",
   "ignore": [],
-  "_release": "8af556dea7",
+  "_release": "4187cb94ce",
   "_resolution": {
     "type": "branch",
     "branch": "master",
-    "commit": "8af556dea74d5de145fc2afc5a91ca952d707b39"
+    "commit": "4187cb94ceb2135a2d6e007d9c701f95dfa7a03b"
   },
   "_source": "git://github.com/someatoms/jsPDF-AutoTable.git",
   "_target": "master",
