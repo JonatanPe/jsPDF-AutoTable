@@ -37,17 +37,19 @@
                 doc.setFontStyle('bold');
                 doc.rect(x, y, width, height, 'F');
                 y += settings.lineHeight / 2 + doc.internal.getLineHeight() / 2;
-                doc.text('' + value, x + settings.padding, y);
+                doc.text(value, x + settings.padding, y);
             },
             renderCell: function (x, y, width, height, key, value, row, settings) {
                 doc.setFillColor(row % 2 === 0 ? 245 : 255);
                 doc.setTextColor(50);
                 doc.rect(x, y, width, height, 'F');
                 y += settings.lineHeight / 2 + doc.internal.getLineHeight() / 2 - 2.5;
-                doc.text('' + value, x + settings.padding, y);
+                doc.text(value, x + settings.padding, y);
             },
             margins: {horizontal: 40, top: 50, bottom: 40},
             startY: false,
+            overflow: 'ellipsize', // false, ellipsize or linebreak (false passes the raw text to renderCell)
+            overflowColumns: false, // Specify which colums that gets subjected to the overflow method chosen. false indicates all
             avoidPageSplit: false,
             extendWidth: true
         }
@@ -97,7 +99,7 @@
      * @returns int
      */
     API.autoTableEndPosY = function () {
-        // If cellPos is not set, autoTable() as probably not been called
+        // If cellPos is not set, autoTable() has probably not been called
         return cellPos ? cellPos.y : false;
     };
 
@@ -110,7 +112,7 @@
 
     /**
      * Parses an html table. To draw a table, use it like this:
-     * `doc.autoTable(false, doc.autoTableHtmlToJson(table))`
+     * `doc.autoTable(false, doc.autoTableHtmlToJson(tableDomElem))`
      *
      * @param table Html table element
      * @returns [] Array of objects with object keys as headers
@@ -173,7 +175,7 @@
         var widths = {};
 
         // Optimal widths
-        var totalWidth = 0;
+        var optimalTableWidth = 0;
         columns.forEach(function (header) {
             var widest = getStringWidth(header.title || '');
             rows.forEach(function (row) {
@@ -185,23 +187,31 @@
                 }
             });
             widths[header.key] = widest;
-            totalWidth += widest;
+            optimalTableWidth += widest;
         });
 
         var paddingAndMargin = settings.padding * 2 * columns.length + settings.margins.horizontal * 2;
-        var spaceDiff = doc.internal.pageSize.width - totalWidth - paddingAndMargin;
+        var spaceDiff = doc.internal.pageSize.width - optimalTableWidth - paddingAndMargin;
 
         var keys = Object.keys(widths);
         if (spaceDiff < 0) {
             // Shrink columns
             var shrinkableColumns = [];
             var shrinkableColumnWidths = 0;
-            keys.forEach(function (key) {
-                if (widths[key] > MIN_COLUMN_WIDTH) {
-                    shrinkableColumns.push(key);
-                    shrinkableColumnWidths += widths[key];
-                }
-            });
+            if(settings.overflowColumns === false) {
+                keys.forEach(function (key) {
+                    if (widths[key] > MIN_COLUMN_WIDTH) {
+                        shrinkableColumns.push(key);
+                        shrinkableColumnWidths += widths[key];
+                    }
+                });
+            } else {
+                shrinkableColumns = settings.overflowColumns;
+                shrinkableColumns.forEach(function(col) {
+                    shrinkableColumnWidths += widths[col];
+                });
+            }
+
             shrinkableColumns.forEach(function (key) {
                 widths[key] += spaceDiff * (widths[key] / shrinkableColumnWidths);
             });
@@ -216,7 +226,7 @@
     }
 
     function printHeader(headers, columnWidths) {
-        if (!headers) return; //
+        if (!headers) return;
         headers.forEach(function (header) {
             var width = columnWidths[header.key] + settings.padding * 2;
             var title = ellipsize(columnWidths[header.key] || '', header.title || '');
@@ -234,10 +244,31 @@
         for (var i = 0; i < rows.length; i++) {
             var row = rows[i];
 
+            var maxRows = 1;
+            if(settings.overflow === 'linebreak') {
+                headers.forEach(function (header) {
+                    if(settings.overflowColumns !== false && settings.overflowColumns.indexOf(header.key) !== -1) {
+                        var value = prop(row, header.key);
+                        var arr = doc.splitTextToSize(value, columnWidths[header.key]);
+                        if(arr.length > maxRows) {
+                            maxRows = arr.length;
+                        }
+                    }
+                });
+            }
+            var rowHeight = settings.lineHeight + (maxRows - 1) * doc.internal.getLineHeight();
+
             headers.forEach(function (header) {
-                var title = ellipsize(columnWidths[header.key] || '', prop(row, header.key));
+                var value = prop(row, header.key);
+                if(settings.overflow === 'linebreak') {
+                    if(settings.overflowColumns !== false && settings.overflowColumns.indexOf(header.key) !== -1) {
+                        value = doc.splitTextToSize(value, columnWidths[header.key]);
+                    }
+                } else if(settings.overflow === 'ellipsize') {
+                    value = ellipsize(columnWidths[header.key], value);
+                }
                 var width = columnWidths[header.key] + settings.padding * 2;
-                settings.renderCell(cellPos.x, cellPos.y, width, settings.lineHeight, header.key, title, i, settings);
+                settings.renderCell(cellPos.x, cellPos.y, width, rowHeight, header.key, value, i, settings);
                 cellPos.x = cellPos.x + columnWidths[header.key] + settings.padding * 2;
             });
 
@@ -250,7 +281,7 @@
                 settings.renderHeader(doc, pageCount, settings);
                 printHeader(headers, columnWidths);
             } else {
-                cellPos.y += settings.lineHeight;
+                cellPos.y += rowHeight;
                 cellPos.x = settings.margins.horizontal;
             }
         }
@@ -262,8 +293,7 @@
      * @param text
      */
     function ellipsize(width, text) {
-        var isBold = doc.internal.getFont().fontStyle === 'bold';
-        if (width + (isBold ? 5 : 0) >= getStringWidth(text)) {
+        if (width >= getStringWidth(text)) {
             return text;
         }
         while (width < getStringWidth(text + "...")) {
@@ -281,7 +311,8 @@
     }
 
     function getStringWidth(txt) {
-        return doc.getStringUnitWidth(txt) * doc.internal.getFontSize();
+        var isBold = doc.internal.getFont().fontStyle === 'bold';
+        return doc.getStringUnitWidth(txt) * doc.internal.getFontSize() + (isBold ? 5 : 0);
     }
 
 })(jsPDF.API);
