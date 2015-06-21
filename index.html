@@ -1,15 +1,10 @@
 <!-- Simply loads the examples page from the master branch -->
+<script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
 <script>
-    window.onload = function () {
-        var xmlHttp = new XMLHttpRequest();
-
-        xmlHttp.onload = function () {
-            var resp = xmlHttp.responseText;
-            resp = resp.replace(/src=\"/gi, 'src="bower_components/jspdf-autotable/examples/');
-            document.write(resp);
-        };
-
-        xmlHttp.open("GET", "bower_components/jspdf-autotable/examples/examples.html", true);
-        xmlHttp.send();
-    }
+    $(document).ready(function() {
+        $.get('bower_components/jspdf-autotable/examples/examples.html', function(res) {
+            var res2 = res.replace(/src=\"/gi, 'src="bower_components/jspdf-autotable/examples/');
+            $('html').html(res2);
+        });
+    });
 </script>
