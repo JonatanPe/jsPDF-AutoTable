@@ -4,7 +4,7 @@
 <script>
     $(document).ready(function() {
         $.get('bower_components/jspdf-autotable/examples/examples.html', function(res) {
-            var res2 = res.replace(/src=\"/gi, 'src="bower_components/jspdf-autotable/examples/');
+            var res2 = res.replace(/(src=")(?!https?:\/\/)\/?/ig, 'src="bower_components/jspdf-autotable/examples/');
             $('html').html(res2);
         });
     });
