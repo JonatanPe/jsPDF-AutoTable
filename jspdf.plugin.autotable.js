@@ -8,89 +8,150 @@
 (function (API) {
     'use strict';
 
-    // On every new jsPDF object, clear variables
-    API.events.push(['initialized', function () {
-        doc = undefined;
-        cellPos = undefined;
-        pageCount = 1;
-        settings = undefined;
-    }], false);
+    // Ratio between font size and font height. The number comes from jspdf's source code
+    var FONT_ROW_RATIO = 1.15;
 
-    var MIN_COLUMN_WIDTH = 25;
+    var doc, // The current jspdf instance
+        cursor, // An object keeping track of the x and y position of the next table cell to draw
+        settings, // Default options merged with user options
+        pageCount, // The  page count the current table spans
+        table; // The current Table instance
 
-    var doc, cellPos, pageCount = 1, settings;
+    // Base style for all themes
+    var defaultStyles = {
+        cellPadding: 5,
+        fontSize: 10,
+        font: "helvetica", // helvetica, times, courier
+        lineColor: 200,
+        lineWidth: 0.1,
+        fontStyle: 'normal', // normal, bold, italic, bolditalic
+        overflow: 'ellipsize', // visible, hidden, ellipsize or linebreak
+        fillColor: 255,
+        textColor: 20,
+        halign: 'left', // left, center, right
+        valign: 'middle', // top, middle, bottom
+        fillStyle: 'F', // 'S', 'F' or 'DF' (stroke, fill or fill then stroke)
+        rowHeight: 20,
+        columnWidth: 'auto'
+    };
 
-    // See README.md or examples for documentation of the options
-    // return a new instance every time to avoid references issues
+    // Styles for the themes
+    var themes = {
+        'striped': {
+            table: {
+                fillColor: 255,
+                textColor: 80,
+                fontStyle: 'normal',
+                fillStyle: 'F'
+            },
+            header: {
+                textColor: 255,
+                fillColor: [41, 128, 185],
+                rowHeight: 23,
+                fontStyle: 'bold'
+            },
+            body: {},
+            alternateRow: {fillColor: 245}
+        },
+        'grid': {
+            table: {
+                fillColor: 255,
+                textColor: 80,
+                fontStyle: 'normal',
+                lineWidth: 0.1,
+                fillStyle: 'S'
+            },
+            header: {
+                textColor: 255,
+                fillColor: [26, 188, 156],
+                rowHeight: 23,
+                fillStyle: 'F',
+                fontStyle: 'bold'
+            },
+            body: {},
+            alternateRow: {}
+        },
+        'plain': {header: {fontStyle: 'bold'}}
+    };
+
+    // See README.md for documentation of the options
+    // See examples.js for usage examples
     var defaultOptions = function () {
         return {
-            padding: 5,
-            fontSize: 10,
-            lineHeight: 20,
-            renderHeader: function (doc, pageNumber, settings) {
-            },
-            renderFooter: function (doc, lastCellPos, pageNumber, settings) {
-            },
-            renderHeaderCell: function (x, y, width, height, key, value, settings) {
-                doc.setFillColor(52, 73, 94); // Asphalt
-                doc.setTextColor(255, 255, 255);
-                doc.setFontStyle('bold');
-                doc.rect(x, y, width, height, 'F');
-                y += settings.lineHeight / 2 + API.autoTableTextHeight() / 2;
-                doc.text(value, x + settings.padding, y);
-            },
-            renderCell: function (x, y, width, height, key, value, row, settings) {
-                doc.setFillColor(row % 2 === 0 ? 245 : 255);
-                doc.setTextColor(50);
-                doc.rect(x, y, width, height, 'F');
-                y += settings.lineHeight / 2 + API.autoTableTextHeight() / 2 - 2.5;
-                doc.text(value, x + settings.padding, y);
-            },
-            margins: {right: 40, left: 40, top: 50, bottom: 40},
-            startY: false,
-            overflow: 'ellipsize', // false, ellipsize or linebreak (false passes the raw text to renderCell)
-            overflowColumns: false, // Specify which colums that gets subjected to the overflow method chosen. false indicates all
-            avoidPageSplit: false,
-            extendWidth: true
+            // Styling
+            theme: 'striped', // 'striped', 'grid' or 'plain'
+            styles: {},
+            headerStyles: {},
+            bodyStyles: {},
+            alternateRowStyles: {},
+            columnStyles: {},
+
+            // Properties
+            startY: false, // false indicates the margin.top value
+            margin: 40,
+            pageBreak: 'auto', // 'auto', 'avoid', 'always'
+            tableWidth: 'auto', // number, 'auto', 'wrap'
+
+            // Hooks
+            createdHeaderCell: function (cell, data) {},
+            createdCell: function (cell, data) {},
+            drawHeaderRow: function (row, data) {},
+            drawRow: function (row, data) {},
+            drawHeaderCell: function (cell, data) {},
+            drawCell: function (cell, data) {},
+            beforePageContent: function (data) {},
+            afterPageContent: function (data) {}
         }
     };
 
     /**
      * Create a table from a set of rows and columns.
      *
-     * @param {Object[]|String[]} columns Either as an array of objects or array of strings
+     * @param {Object[]|String[]} headers Either as an array of objects or array of strings
      * @param {Object[][]|String[][]} data Either as an array of objects or array of strings
-     * @param {Object} [options={}] Options that will override the default ones (above)
+     * @param {Object} [options={}] Options that will override the default ones
      */
-    API.autoTable = function (columns, data, options) {
-        options = options || {};
-        columns = columns || [];
+    API.autoTable = function (headers, data, options) {
         doc = this;
-
-        var userFontSize = doc.internal.getFontSize();
-
-        initData({columns: columns, data: data});
-        initOptions(options);
-
-        cellPos = {
-            x: settings.margins.left,
-            y: settings.startY === false ? settings.margins.top : settings.startY
+        settings = initOptions(options || {});
+        pageCount = 1;
+        cursor = {
+            x: settings.margin.left,
+            y: settings.startY === false ? settings.margin.top : settings.startY
         };
 
-        var tableHeight = settings.margins.bottom + settings.margins.top + settings.lineHeight * (data.length + 1) + 5 + settings.startY;
-        if (settings.startY !== false && settings.avoidPageSplit && tableHeight > doc.internal.pageSize.height) {
-            pageCount++;
+        var userStyles = {
+            textColor: 30, // Setting text color to dark gray as it can't be obtained from jsPDF
+            fontSize: doc.internal.getFontSize(),
+            fontStyle: doc.internal.getFont().fontStyle
+        };
+
+        // Create the table model with its columns, rows and cells
+        createModels(headers, data);
+        calculateWidths();
+
+        // Page break if there is room for only the first data row
+        var firstRowHeight = table.rows[0] && settings.pageBreak === 'auto' ? table.rows[0].height : 0;
+        var minTableBottomPos = settings.startY + settings.margin.bottom + table.headerRow.height + firstRowHeight;
+        if (settings.pageBreak === 'avoid') {
+            minTableBottomPos += table.height;
+        }
+        if ((settings.pageBreak === 'always' && settings.startY !== false) ||
+            (settings.startY !== false && minTableBottomPos > doc.internal.pageSize.height)) {
             doc.addPage();
-            cellPos.y = settings.margins.top;
+            cursor.y = settings.margin.top;
         }
 
-        settings.renderHeader(doc, pageCount, settings);
-        var columnWidths = calculateColumnWidths(data, columns);
-        printHeader(columns, columnWidths);
-        printRows(columns, data, columnWidths);
-        settings.renderFooter(doc, cellPos, pageCount, settings);
+        applyStyles(userStyles);
+        settings.beforePageContent(hooksData());
+        if (settings.drawHeaderRow(table.headerRow, hooksData({row: table.headerRow})) !== false) {
+            printRow(table.headerRow, settings.drawHeaderCell);
+        }
+        applyStyles(userStyles);
+        printRows();
+        settings.afterPageContent(hooksData());
 
-        doc.setFontSize(userFontSize);
+        applyStyles(userStyles);
 
         return this;
     };
@@ -100,319 +161,507 @@
      * @returns int
      */
     API.autoTableEndPosY = function () {
-        // If cellPos is not set, autoTable() has probably not been called
-        return cellPos ? cellPos.y : false;
+        if (typeof cursor === 'undefined' || typeof cursor.y === 'undefined') {
+            console.error("autoTableEndPosY() called without autoTable() being called first");
+            return 0;
+        }
+        return cursor.y;
     };
 
     /**
-     * @deprecated Use autoTableEndPosY()
-     */
-    API.autoTableEndPos = function () {
-        return cellPos;
-    };
-
-    /**
-     * Parses an html table. To draw a table, use it like this:
-     * `doc.autoTable(false, doc.autoTableHtmlToJson(tableDomElem))`
+     * Parses an html table
      *
      * @param table Html table element
-     * @param indexBased Boolean flag if result should be returned as seperate cols and data
-     * @returns []|{} Array of objects with object keys as headers or based on indexes if indexBased is set to true
+     * @returns Object Object with two properties, columns and rows
      */
-    API.autoTableHtmlToJson = function (table, indexBased) {
-            var data = [], headers = {}, header = table.rows[0], i, tableRow, rowData, j;
-        if (indexBased) {
-            headers = [];
-            for (i = 0; i < header.cells.length; i++) {
-                headers.push(header.cells[i] ? header.cells[i].textContent : '');
-            }
+    API.autoTableHtmlToJson = function (table) {
+        var data = [],
+            headers = [],
+            header = table.rows[0],
+            tableRow,
+            rowData,
+            i,
+            j;
 
-            for (i = 1; i < table.rows.length; i++) {
-                tableRow = table.rows[i];
-                rowData = [];
-                for (j = 0; j < header.cells.length; j++) {
-                    rowData.push(tableRow.cells[j] ? tableRow.cells[j].textContent : '');
-                }
-                data.push(rowData);
-            }
-            return {columns: headers, data: data};
-        } else {
-            for (i = 0; i < header.cells.length; i++) {
-                headers[i] = header.cells[i] ? header.cells[i].textContent : '';
-            }
-
-            for (i = 1; i < table.rows.length; i++) {
-                tableRow = table.rows[i];
-                rowData = {};
-                for (j = 0; j < header.cells.length; j++) {
-                    rowData[headers[j]] = tableRow.cells[j] ? tableRow.cells[j].textContent : '';
-                }
-                data.push(rowData);
-            }
-
-            return data;
+        for (i = 0; i < header.cells.length; i++) {
+            headers.push(typeof header.cells[i] !== 'undefined' ? header.cells[i].textContent : '');
         }
+
+        for (i = 1; i < table.rows.length; i++) {
+            tableRow = table.rows[i];
+            rowData = [];
+            for (j = 0; j < header.cells.length; j++) {
+                rowData.push(typeof tableRow.cells[j] !== 'undefined' ? tableRow.cells[j].textContent : '');
+            }
+            data.push(rowData);
+        }
+        return {columns: headers, data: data, rows: data};
     };
 
     /**
-     * Basically the same as getLineHeight() in 1.0+ versions of jsPDF, however
-     * added here for backwards compatibility with version 0.9
+     * Improved text function with halign and valign support
+     * Inspiration from: http://stackoverflow.com/questions/28327510/align-text-right-using-jspdf/28433113#28433113
+     */
+    API.autoTableText = function (text, x, y, styles) {
+        if (typeof x !== 'number' || typeof y !== 'number') {
+            console.error('The x and y parameters are required. Missing for the text: ', text);
+        }
+        var fontSize = doc.internal.getFontSize() / doc.internal.scaleFactor;
+
+        // As defined in jsPDF source code
+        var lineHeightProportion = FONT_ROW_RATIO;
+
+        var splitRegex = /\r\n|\r|\n/g;
+        var splittedText = null;
+        var lineCount = 1;
+        if (styles.valign === 'middle' || styles.valign === 'bottom' || styles.halign === 'center' || styles.halign === 'right') {
+            splittedText = typeof text === 'string' ? text.split(splitRegex) : text;
+
+            lineCount = splittedText.length || 1;
+        }
+
+        // Align the top
+        y += fontSize * (2 - lineHeightProportion);
+
+        if (styles.valign === 'middle')
+            y -= (lineCount / 2) * fontSize;
+        else if (styles.valign === 'bottom')
+            y -= lineCount * fontSize;
+
+        if (styles.halign === 'center' || styles.halign === 'right') {
+            var alignSize = fontSize;
+            if (styles.halign === 'center')
+                alignSize *= 0.5;
+
+            if (lineCount >= 1) {
+                for (var iLine = 0; iLine < splittedText.length; iLine++) {
+                    doc.text(splittedText[iLine], x - doc.getStringUnitWidth(splittedText[iLine]) * alignSize, y);
+                    y += fontSize;
+                }
+                return doc;
+            }
+            x -= doc.getStringUnitWidth(text) * alignSize;
+        }
+
+        doc.text(text, x, y);
+        return doc;
+    };
+
+    function initOptions(userOptions) {
+        var settings = extend(defaultOptions(), userOptions);
+
+        // Options
+        if (typeof settings.extendWidth !== 'undefined') {
+            settings.tableWidth = settings.extendWidth ? 'auto' : 'wrap';
+            console.error("Use of deprecated option: extendWidth, use tableWidth instead.");
+        }
+        if (typeof settings.margins !== 'undefined') {
+            if (typeof settings.margin === 'undefined') settings.margin = settings.margins;
+            console.error("Use of deprecated option: margins, use margin instead.");
+        }
+
+        [['padding', 'cellPadding'], ['lineHeight', 'rowHeight'], 'fontSize', 'overflow'].forEach(function (o) {
+            var deprecatedOption = typeof o === 'string' ? o : o[0];
+            var style = typeof o === 'string' ? o : o[1];
+            if (typeof settings[deprecatedOption] !== 'undefined') {
+                if (typeof settings.styles[style] === 'undefined') {
+                    settings.styles[style] = settings[deprecatedOption];
+                }
+                console.error("Use of deprecated option: " + deprecatedOption + ", use the style " + style + " instead.");
+            }
+        });
+
+        // Unifying
+        var marginSetting = settings.margin;
+        settings.margin = {};
+        if (typeof marginSetting.horizontal === 'number') {
+            marginSetting.right = marginSetting.horizontal;
+            marginSetting.left = marginSetting.horizontal;
+        }
+        if (typeof marginSetting.vertical === 'number') {
+            marginSetting.top = marginSetting.vertical;
+            marginSetting.bottom = marginSetting.vertical;
+        }
+        ['top', 'right', 'bottom', 'left'].forEach(function (side, i) {
+            if (typeof marginSetting === 'number') {
+                settings.margin[side] = marginSetting;
+            } else {
+                var key = Array.isArray(marginSetting) ? i : side;
+                settings.margin[side] = typeof marginSetting[key] === 'number' ? marginSetting[key] : 40;
+            }
+        });
+
+        return settings;
+    }
+
+    /**
+     * Create models from the user input
      *
-     * Export it to make it available in drawCell and drawHeaderCell
+     * @param inputHeaders
+     * @param inputData
      */
-    API.autoTableTextHeight = function() {
-        // The value 1.15 comes from from the jsPDF source code and looks about right
-        return doc.internal.getFontSize() * 1.15;
-    };
+    function createModels(inputHeaders, inputData) {
+        table = new Table();
+
+        var splitRegex = /\r\n|\r|\n/g;
+
+        // Header row and columns
+        var headerRow = new Row();
+        headerRow.raw = inputHeaders;
+        headerRow.index = -1;
+
+        var themeStyles = extend(defaultStyles, themes[settings.theme].table, themes[settings.theme].header);
+        headerRow.styles = extend(themeStyles, settings.styles, settings.headerStyles);
+
+        // Columns and header row
+        inputHeaders.forEach(function (rawColumn, dataKey) {
+            if (typeof rawColumn === 'object') {
+                dataKey = typeof rawColumn.dataKey !== 'undefined' ? rawColumn.dataKey : rawColumn.key;
+            }
+
+            if (typeof rawColumn.width !== 'undefined') {
+                console.error("Use of deprecated option: column.width, use column.styles.columnWidth instead.");
+            }
+
+            var col = new Column(dataKey);
+            col.styles = {};
+            if (typeof col.styles.columnWidth === 'undefined') col.styles.columnWidth = 'auto';
+            table.columns.push(col);
+
+            var cell = new Cell();
+            cell.raw = typeof rawColumn === 'object' ? rawColumn.title : rawColumn;
+            cell.styles = headerRow.styles;
+            cell.text = '' + cell.raw;
+            cell.contentWidth = cell.styles.cellPadding * 2 + getStringWidth(cell.text, cell.styles);
+            cell.text = cell.text.split(splitRegex);
+
+            headerRow.cells[dataKey] = cell;
+            settings.createdHeaderCell(cell, {column: col, row: headerRow, settings: settings});
+        });
+        table.headerRow = headerRow;
+
+        // Rows och cells
+        inputData.forEach(function (rawRow, i) {
+            var row = new Row(rawRow);
+            var isAlternate = i % 2 === 0;
+            var themeStyles = extend(defaultStyles, themes[settings.theme].table, isAlternate ? themes[settings.theme].alternateRow : {});
+            var userStyles = extend(settings.styles, settings.bodyStyles, isAlternate ? settings.alternateRowStyles : {});
+            row.styles = extend(themeStyles, userStyles);
+            row.index = i;
+            table.columns.forEach(function (column) {
+                var cell = new Cell();
+                cell.raw = rawRow[column.dataKey];
+                cell.styles = extend(row.styles, column.styles);
+                cell.text = typeof cell.raw !== 'undefined' ? '' + cell.raw : ''; // Stringify 0 and false, but not undefined
+                row.cells[column.dataKey] = cell;
+                settings.createdCell(cell, {column: column, row: row, settings: settings});
+                cell.contentWidth = cell.styles.cellPadding * 2 + getStringWidth(cell.text, cell.styles);
+                cell.text = cell.text.split(splitRegex);
+            });
+            table.rows.push(row);
+        });
+    }
 
     /**
-     * Transform all to the object initialization form
-     * @param params
+     * Calculate the column widths
      */
-    function initData(params) {
-
-        // Object only initial
-        if (!params.columns || params.columns.length === 0) {
-            var keys = Object.keys(params.data[0]);
-            Array.prototype.push.apply(params.columns, keys);
-            params.columns.forEach(function (title, i) {
-                params.columns[i] = {title: title, key: keys[i]};
-            });
-        }
-        // Array initialization form
-        else if (typeof params.columns[0] === 'string') {
-            params.data.forEach(function (row, i) {
-                var obj = {};
-                for (var j = 0; j < row.length; j++) {
-                    obj[j] = params.data[i][j];
+    function calculateWidths() {
+        // Column and table content width
+        var tableContentWidth = 0;
+        table.columns.forEach(function (column) {
+            column.contentWidth = table.headerRow.cells[column.dataKey].contentWidth;
+            table.rows.forEach(function (row) {
+                var cellWidth = row.cells[column.dataKey].contentWidth;
+                if (cellWidth > column.contentWidth) {
+                    column.contentWidth = cellWidth;
                 }
-                params.data[i] = obj;
             });
-            params.columns.forEach(function (title, i) {
-                params.columns[i] = {title: title, key: i};
-            });
-        } else {
-            // Use options as is
-        }
-    }
-
-    function initOptions(raw) {
-        settings = defaultOptions();
-        Object.keys(raw).forEach(function (key) {
-            settings[key] = raw[key];
+            column.width = column.contentWidth;
+            tableContentWidth += column.contentWidth;
         });
-        doc.setFontSize(settings.fontSize);
+        table.contentWidth = tableContentWidth;
 
-        // Backwards compatibility
-        if(settings.margins.horizontal !== undefined) {
-            settings.margins.left = settings.margins.horizontal;
-            settings.margins.right = settings.margins.horizontal;
-        } else {
-            settings.margins.horizontal = settings.margins.left;
+        var maxTableWidth = doc.internal.pageSize.width - settings.margin.left - settings.margin.right;
+        var preferredTableWidth = maxTableWidth; // settings.tableWidth === 'auto'
+        if (typeof settings.tableWidth === 'number') {
+            preferredTableWidth = settings.tableWidth;
+        } else if (settings.tableWidth === 'wrap') {
+            preferredTableWidth = table.contentWidth;
         }
+        table.width = preferredTableWidth < maxTableWidth ? preferredTableWidth : maxTableWidth;
+
+        // To avoid subjecting columns with little content with the chosen overflow method,
+        // never shrink a column more than the table divided by column count (its "fair part")
+        var dynamicColumns = [];
+        var dynamicColumnsContentWidth = 0;
+        var fairWidth = table.width / table.columns.length;
+        var staticWidth = 0;
+        table.columns.forEach(function (column) {
+            if (column.styles.columnWidth === 'wrap') {
+                column.width = column.contentWidth;
+            } else if (typeof column.styles.columnWidth === 'number') {
+                column.width = column.styles.columnWidth;
+            } else if (column.styles.columnWidth === 'auto' || true) {
+                if (column.contentWidth <= fairWidth && table.contentWidth > table.width) {
+                    column.width = column.contentWidth;
+                } else {
+                    dynamicColumns.push(column);
+                    dynamicColumnsContentWidth += column.contentWidth;
+                    column.width = 0;
+                }
+            }
+            staticWidth += column.width;
+        });
+
+        // Distributes extra width or trims columns down to fit
+        distributeWidth(dynamicColumns, staticWidth, dynamicColumnsContentWidth, fairWidth);
+
+        // Row height, table height and text overflow
+        table.height = 0;
+        var all = table.rows.concat(table.headerRow);
+        all.forEach(function (row, i) {
+            var lineBreakCount = 0;
+            table.columns.forEach(function (col) {
+                var cell = row.cells[col.dataKey];
+                applyStyles(cell.styles);
+                var textSpace = col.width - cell.styles.cellPadding * 2;
+                if (cell.styles.overflow === 'linebreak') {
+                    // Add one pt to textSpace to fix rounding error
+                    cell.text = doc.splitTextToSize(cell.text, textSpace + 1, {fontSize: cell.styles.fontSize});
+                } else if (cell.styles.overflow === 'ellipsize') {
+                    cell.text = ellipsize(cell.text, textSpace, cell.styles);
+                } else if (cell.styles.overflow === 'visible') {
+                    // Do nothing
+                } else if (cell.styles.overflow === 'hidden') {
+                    cell.text = ellipsize(cell.text, textSpace, cell.styles, '');
+                } else if (typeof cell.styles.overflow === 'function') {
+                    cell.text = cell.styles.overflow(cell.text, textSpace);
+                } else {
+                    console.error("Unrecognized overflow type: " + cell.styles.overflow);
+                }
+                var count = Array.isArray(cell.text) ? cell.text.length - 1 : 0;
+                if (count > lineBreakCount) {
+                    lineBreakCount = count;
+                }
+            });
+            row.height = row.styles.rowHeight + lineBreakCount * row.styles.fontSize * FONT_ROW_RATIO;
+            table.height += row.height;
+        });
     }
 
-    function calculateColumnWidths(rows, columns) {
-        var widths = {};
-
-        // Optimal widths
-        var optimalTableWidth = 0;
-        columns.forEach(function (header) {
-            var widest = getStringWidth(header.title || '', true);
-            if(typeof header.width == "number") {
-                widest = header.width;
+    function distributeWidth(dynamicColumns, staticWidth, dynamicColumnsContentWidth, fairWidth) {
+        var extraWidth = table.width - staticWidth - dynamicColumnsContentWidth;
+        for (var i = 0; i < dynamicColumns.length; i++) {
+            var col = dynamicColumns[i];
+            var ratio = col.contentWidth / dynamicColumnsContentWidth;
+            // A column turned out to be none dynamic, start over recursively
+            var isNoneDynamic = col.contentWidth + extraWidth * ratio < fairWidth;
+            if (extraWidth < 0 && isNoneDynamic) {
+                dynamicColumns.splice(i, 1);
+                dynamicColumnsContentWidth -= col.contentWidth;
+                col.width = fairWidth;
+                staticWidth += col.width;
+                distributeWidth(dynamicColumns, staticWidth, dynamicColumnsContentWidth, fairWidth);
+                break;
             } else {
-                rows.forEach(function (row) {
-                    if (!header.hasOwnProperty('key'))
-                        throw new Error("The key attribute is required in every header");
-                    var w = getStringWidth(stringify(row, header.key));
-                    if (w > widest) {
-                        widest = w;
-                    }
-                });
+                col.width = col.contentWidth + extraWidth * ratio;
             }
-            widths[header.key] = widest;
-            optimalTableWidth += widest;
-        });
-
-        var paddingAndMargin = settings.padding * 2 * columns.length + settings.margins.left + settings.margins.right;
-        var spaceDiff = doc.internal.pageSize.width - optimalTableWidth - paddingAndMargin;
-
-        var keys = Object.keys(widths);
-        if (spaceDiff < 0) {
-            // Shrink columns
-            var shrinkableColumns = [];
-            var shrinkableColumnWidths = 0;
-            if (settings.overflowColumns === false) {
-                keys.forEach(function (key) {
-                    if (widths[key] > MIN_COLUMN_WIDTH) {
-                        shrinkableColumns.push(key);
-                        shrinkableColumnWidths += widths[key];
-                    }
-                });
-            } else {
-                shrinkableColumns = settings.overflowColumns;
-                shrinkableColumns.forEach(function (col) {
-                    shrinkableColumnWidths += widths[col];
-                });
-            }
-
-            shrinkableColumns.forEach(function (key) {
-                widths[key] += spaceDiff * (widths[key] / shrinkableColumnWidths);
-            });
-        } else if (spaceDiff > 0 && settings.extendWidth) {
-            // Fill page horizontally
-            keys.forEach(function (key) {
-                widths[key] += spaceDiff / keys.length;
-            });
         }
-
-        return widths;
     }
 
-    function printHeader(headers, columnWidths) {
-        if (!headers) return;
-
-        // First calculate the height of the row
-        // (to do that the maxium amount of rows first need to be found)
-        var maxRows = 1;
-        if (settings.overflow === 'linebreak') {
-            // Font style must be the same as in function renderHeaderCell()
-            doc.setFontStyle('bold');
-
-            headers.forEach(function (header) {
-                if (isOverflowColumn(header)) {
-                    var value = header.title || '';
-                    var arr = doc.splitTextToSize(value, columnWidths[header.key]);
-                    if (arr.length > maxRows) {
-                        maxRows = arr.length;
-                    }
-                }
-            });
-        }
-        var rowHeight = settings.lineHeight + (maxRows - 1) * API.autoTableTextHeight() + 5;
-
-        // Avoid isolated table headers when drawing multiple tables. Add a new page 
-        // if cellpos would be at the end of page after drawing the header row
-        var newPage = (cellPos.y + settings.margins.bottom + rowHeight * 2) >= doc.internal.pageSize.height;
-        if (newPage) {
-            settings.renderFooter(doc, cellPos, pageCount, settings);
-            doc.addPage();
-            cellPos = {x: settings.margins.left, y: settings.margins.top};
-            pageCount++;
-            settings.renderHeader(doc, pageCount, settings);
-        }
-
-        headers.forEach(function (header) {
-            var width = columnWidths[header.key] + settings.padding * 2;
-            var value = header.title || '';
-            if (settings.overflow === 'linebreak') {
-                if (isOverflowColumn(header)) {
-                    value = doc.splitTextToSize(value, columnWidths[header.key]);
-                }
-            } else if (settings.overflow === 'ellipsize') {
-                value = ellipsize(columnWidths[header.key], value);
-            }
-            settings.renderHeaderCell(cellPos.x, cellPos.y, width, rowHeight, header.key, value, settings);
-            cellPos.x += width;
-        });
-        doc.setTextColor(70, 70, 70);
-        doc.setFontStyle('normal');
-
-        cellPos.y += rowHeight;
-        cellPos.x = settings.margins.left;
-    }
-
-    function printRows(headers, rows, columnWidths) {
-        for (var i = 0; i < rows.length; i++) {
-            var row = rows[i];
-
-            // First calculate the height of the row
-            // (to do that the maxium amount of rows first need to be found)
-            var maxRows = 1;
-            if (settings.overflow === 'linebreak') {
-                headers.forEach(function (header) {
-                    if (isOverflowColumn(header)) {
-                        var value = stringify(row, header.key);
-                        var arr = doc.splitTextToSize(value, columnWidths[header.key]);
-                        if (arr.length > maxRows) {
-                            maxRows = arr.length;
-                        }
-                    }
-                });
-            }
-            var rowHeight = settings.lineHeight + (maxRows - 1) * API.autoTableTextHeight();
-
-
-            // Render the cell
-            headers.forEach(function (header) {
-                var value = stringify(row, header.key);
-                if (settings.overflow === 'linebreak') {
-                    if (isOverflowColumn(header)) {
-                        value = doc.splitTextToSize(value, columnWidths[header.key]);
-                    }
-                } else if (settings.overflow === 'ellipsize') {
-                    value = ellipsize(columnWidths[header.key], value);
-                }
-                var width = columnWidths[header.key] + settings.padding * 2;
-                settings.renderCell(cellPos.x, cellPos.y, width, rowHeight, header.key, value, i, settings);
-                cellPos.x = cellPos.x + columnWidths[header.key] + settings.padding * 2;
-            });
-
-            // Add a new page if cellpos is at the end of page
-            var newPage = (cellPos.y + settings.margins.bottom + rowHeight * 2) >= doc.internal.pageSize.height;
+    function printRows() {
+        table.rows.forEach(function (row, i) {
+            // Add a new page if cursor is at the end of page
+            var newPage = table.rows[i] && (cursor.y + table.rows[i].height + settings.margin.bottom) >= doc.internal.pageSize.height;
             if (newPage) {
-                if (i+1 < rows.length) {
-                    settings.renderFooter(doc, cellPos, pageCount, settings);
-                    doc.addPage();
-                    cellPos = {x: settings.margins.left, y: settings.margins.top};
-                    pageCount++;
-                    settings.renderHeader(doc, pageCount, settings);
-                    printHeader(headers, columnWidths);
+                settings.afterPageContent(hooksData());
+                doc.addPage();
+                pageCount++;
+                cursor = {x: settings.margin.left, y: settings.margin.top};
+                settings.beforePageContent(hooksData());
+                if (settings.drawHeaderRow(row, hooksData({row: row})) !== false) {
+                    printRow(table.headerRow, settings.drawHeaderCell);
                 }
-            } else {
-                cellPos.y += rowHeight;
-                cellPos.x = settings.margins.left;
             }
-        }
+            row.y = cursor.y;
+            doc.setTextColor(0);
+            if (settings.drawRow(row, hooksData({row: row})) !== false) {
+                printRow(row, settings.drawCell);
+            }
+        });
     }
 
-    function isOverflowColumn(header) {
-        return settings.overflowColumns === false || settings.overflowColumns.indexOf(header.key) !== -1;
+    function printRow(row, hookHandler) {
+        table.columns.forEach(function (column) {
+            var cell = row.cells[column.dataKey];
+            applyStyles(cell.styles);
+
+            cell.x = cursor.x;
+            cell.y = cursor.y;
+            cell.height = row.height;
+            cell.width = column.width;
+
+            if (cell.styles.valign === 'top') {
+                cell.textPos.y = cursor.y + cell.styles.cellPadding;
+            } else if (cell.styles.valign === 'bottom') {
+                cell.textPos.y = cursor.y + row.height - cell.styles.cellPadding;
+            } else {
+                cell.textPos.y = cursor.y + row.height / 2;
+            }
+
+            if (cell.styles.halign === 'right') {
+                cell.textPos.x = cursor.x + cell.width - cell.styles.cellPadding;
+            } else if (cell.styles.halign === 'center') {
+                cell.textPos.x = cursor.x + cell.width / 2;
+            } else {
+                cell.textPos.x = cursor.x + cell.styles.cellPadding;
+            }
+
+            var data = hooksData({column: column, row: row});
+            if (hookHandler(cell, data) !== false) {
+                doc.rect(cell.x, cell.y, cell.width, cell.height, cell.styles.fillStyle);
+                doc.autoTableText(cell.text, cell.textPos.x, cell.textPos.y, {
+                    halign: cell.styles.halign,
+                    valign: cell.styles.valign
+                });
+            }
+
+            cursor.x += cell.width;
+        });
+
+        cursor.y += row.height;
+        cursor.x = settings.margin.left;
+    }
+
+    function applyStyles(styles) {
+        var arr = [
+            {func: doc.setFillColor, value: styles.fillColor},
+            {func: doc.setTextColor, value: styles.textColor},
+            {func: doc.setFontStyle, value: styles.fontStyle},
+            {func: doc.setDrawColor, value: styles.lineColor},
+            {func: doc.setLineWidth, value: styles.lineWidth},
+            {func: doc.setFont, value: styles.font},
+            {func: doc.setFontSize, value: styles.fontSize}
+        ];
+        arr.forEach(function (obj) {
+            if (typeof obj.value !== 'undefined') {
+                if (obj.value.constructor === Array) {
+                    obj.func.apply(this, obj.value);
+                } else {
+                    obj.func(obj.value);
+                }
+            }
+        });
+    }
+
+    function hooksData(additionalData) {
+        additionalData = additionalData || {};
+        var data = {
+            pageCount: pageCount,
+            settings: settings,
+            table: table,
+            cursor: cursor
+        };
+        for (var prop in additionalData) {
+            if (additionalData.hasOwnProperty(prop)) {
+                data[prop] = additionalData[prop];
+            }
+        }
+        return data;
     }
 
     /**
      * Ellipsize the text to fit in the width
-     * @param width
-     * @param text
      */
-    function ellipsize(width, text) {
-        if (width >= getStringWidth(text)) {
+    function ellipsize(text, width, styles, ellipsizeStr) {
+        ellipsizeStr = typeof  ellipsizeStr !== 'undefined' ? ellipsizeStr : '...';
+
+        if (Array.isArray(text)) {
+            text.forEach(function (str, i) {
+                text[i] = ellipsize(str, width, styles, ellipsizeStr);
+            });
             return text;
         }
-        while (width < getStringWidth(text + "...")) {
+
+        if (width >= getStringWidth(text, styles)) {
+            return text;
+        }
+        while (width < getStringWidth(text + ellipsizeStr, styles)) {
             if (text.length < 2) {
                 break;
             }
             text = text.substring(0, text.length - 1);
         }
-        text += "...";
-        return text;
+        return text.trim() + ellipsizeStr;
     }
 
-    function stringify(row, key) {
-        return row.hasOwnProperty(key) ? '' + row[key] : '';
+    function getStringWidth(text, styles) {
+        applyStyles(styles);
+        var w = doc.getStringUnitWidth(text);
+        return w * styles.fontSize;
     }
 
-    function getStringWidth(txt, isBold) {
-        if(isBold) {
-            doc.setFontStyle('bold');
+    function extend(defaults) {
+        var extended = {};
+        var prop;
+        for (prop in defaults) {
+            if (defaults.hasOwnProperty(prop)) {
+                extended[prop] = defaults[prop];
+            }
         }
-        var strWidth = doc.getStringUnitWidth(txt) * doc.internal.getFontSize();
-        if(isBold) {
-            doc.setFontStyle('normal');
+        for (var i = 1; i < arguments.length; i++) {
+            var options = arguments[i];
+            for (prop in options) {
+                if (options.hasOwnProperty(prop)) {
+                    if (typeof options[prop] === 'object' && !Array.isArray(options[prop])) {
+                        //extended[prop] = extend(extended[prop] || {}, options[prop])
+                        extended[prop] = options[prop];
+                    } else {
+                        extended[prop] = options[prop];
+                    }
+                }
+            }
         }
-        return strWidth;
+        return extended;
     }
 
 })(jsPDF.API);
+
+var Table = function () {
+    this.height = 0;
+    this.width = 0;
+    this.contentWidth = 0;
+    this.rows = [];
+    this.columns = [];
+    this.headerRow = null;
+    this.settings = {};
+};
+
+var Row = function () {
+    this.raw = {};
+    this.index = 0;
+    this.styles = {};
+    this.cells = {};
+    this.height = -1;
+    this.y = 0;
+};
+
+var Cell = function (raw) {
+    this.raw = raw;
+    this.styles = {};
+    this.text = '';
+    this.contentWidth = -1;
+    this.textPos = {};
+    this.height = 0;
+    this.width = 0;
+    this.x = 0;
+    this.y = 0;
+};
+
+var Column = function (dataKey) {
+    this.dataKey = dataKey;
+    this.options = {};
+    this.styles = {};
+    this.contentWidth = -1;
+    this.width = -1;
+};

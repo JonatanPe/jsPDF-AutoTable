@@ -15,11 +15,11 @@ gulp.task('bower', shell.task([
 gulp.task('build', ['bower'], function () {
     gulp.src('bower_components/jspdf-autotable/examples/**/*')
         .pipe(gulp.dest('.'));
-    gulp.src('bower_components/jspdf-autotable/jspdf.plugin.autotable.js')
+    gulp.src('bower_components/jspdf-autotable/dist/**/*')
         .pipe(gulp.dest('.'));
     gulp.src('bower_components/jspdf-autotable/examples/examples.html')
         .pipe(rename('index.html'))
-        .pipe(replace(/..\/jspdf.plugin.autotable.js/g, 'jspdf.plugin.autotable.js'))
+        .pipe(replace(/..\/dist\//g, ''))
         .pipe(gulp.dest('.'));
 });
 
