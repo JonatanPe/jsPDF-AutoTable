@@ -9,7 +9,7 @@
   },
   "devDependencies": {},
   "scripts": {
-    "build": "node build"
+    "build": "npm update && node build"
   },
   "repository": {
     "type": "git",
