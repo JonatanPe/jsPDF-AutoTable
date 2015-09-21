@@ -5,16 +5,11 @@
   "description": "",
   "main": "gulpfile.js",
   "dependencies": {
-    "bower": "^1.4.1",
-    "gulp": "^3.9.0",
-    "gulp-rename": "^1.2.2",
-    "gulp-replace": "^0.5.3",
-    "gulp-shell": "^0.4.2",
-    "intern": "^2.2.2"
+    "jspdf-autotable": "github:simonbengtsson/jspdf-autotable#master"
   },
   "devDependencies": {},
   "scripts": {
-    "build": "gulp"
+    "build": "node build"
   },
   "repository": {
     "type": "git",
