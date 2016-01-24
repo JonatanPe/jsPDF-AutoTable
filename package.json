@@ -1,9 +1,7 @@
 {
-  "name": "autotable",
+  "name": "jspdf-autotable",
+  "description": "Website for the jspdf-autotable plugin http://github.com/simonbengtsson/jspdf-autotable",
   "private": "true",
-  "version": "1.0.0",
-  "description": "",
-  "main": "gulpfile.js",
   "dependencies": {
     "jspdf-autotable": "github:simonbengtsson/jspdf-autotable#master"
   },
@@ -12,15 +10,5 @@
   },
   "scripts": {
     "build": "npm update && ncp node_modules/jspdf-autotable/examples ."
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/someatoms/jsPDF-AutoTable.git"
-  },
-  "author": "",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/someatoms/jsPDF-AutoTable/issues"
-  },
-  "homepage": "https://github.com/someatoms/jsPDF-AutoTable#readme"
+  }
 }
