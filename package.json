@@ -7,9 +7,11 @@
   "dependencies": {
     "jspdf-autotable": "github:simonbengtsson/jspdf-autotable#master"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "ncp": "^2.0.0"
+  },
   "scripts": {
-    "build": "npm update && node build"
+    "build": "npm update && ncp node_modules/jspdf-autotable/examples ."
   },
   "repository": {
     "type": "git",
