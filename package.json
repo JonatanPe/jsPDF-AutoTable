@@ -1,5 +1,5 @@
 {
-  "name": "jspdf-autotable",
+  "name": "jspdf-autotable-demo",
   "description": "Website for the jspdf-autotable plugin http://github.com/simonbengtsson/jspdf-autotable",
   "private": "true",
   "dependencies": {
