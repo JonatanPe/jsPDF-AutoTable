@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple example</title>
+</head>
+<body>
+<button id="generate">Generate pdf</button>
+
+<script src="../libs/require.js"></script>
+<script>
+    // Setting up paths for jspdf and jspdf-autotable so that the full path is not needed 
+    // each time they are used
+    require.config({paths: {
+        'jspdf': '../libs/jspdf.min', 
+        'jspdf-autotable': '../libs/jspdf.plugin.autotable.umd'
+    }});
+    
+    require(['main'], function(main) {
+        document.getElementById("generate").onclick = function() {
+            main.generatePdf();
+        }
+    });
+</script>
+</body>
+</html>
