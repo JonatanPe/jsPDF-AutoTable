@@ -17095,7 +17095,7 @@
 /***/ function(module, exports, __webpack_require__) {
 
 	/** 
-	 * jsPDF AutoTable plugin v2.0.35
+	 * jsPDF AutoTable plugin v2.0.37
 	 * Copyright (c) 2014 Simon Bengtsson, https://github.com/simonbengtsson/jsPDF-AutoTable 
 	 * 
 	 * Licensed under the MIT License. 
@@ -17201,14 +17201,14 @@
 		 */
 		var themes = {
 		    'striped': {
-		        table: { fillColor: 255, textColor: 80, fontStyle: 'normal', fillStyle: 'F' },
+		        table: { fillColor: 255, textColor: 80, fontStyle: 'normal' },
 		        header: { textColor: 255, fillColor: [41, 128, 185], rowHeight: 23, fontStyle: 'bold' },
 		        body: {},
 		        alternateRow: { fillColor: 245 }
 		    },
 		    'grid': {
-		        table: { fillColor: 255, textColor: 80, fontStyle: 'normal', lineWidth: 0.1, fillStyle: 'DF' },
-		        header: { textColor: 255, fillColor: [26, 188, 156], rowHeight: 23, fillStyle: 'F', fontStyle: 'bold' },
+		        table: { fillColor: 255, textColor: 80, fontStyle: 'normal', lineWidth: 0.1 },
+		        header: { textColor: 255, fillColor: [26, 188, 156], rowHeight: 23, fontStyle: 'bold', lineWidth: 0 },
 		        body: {},
 		        alternateRow: {}
 		    },
@@ -17241,7 +17241,8 @@
 		        drawHeaderCell: function drawHeaderCell(cell, data) {},
 		        drawCell: function drawCell(cell, data) {},
 		        beforePageContent: function beforePageContent(data) {},
-		        afterPageContent: function afterPageContent(data) {}
+		        afterPageContent: function afterPageContent(data) {},
+		        afterPageAdd: function afterPageAdd(data) {}
 		    };
 		}
 
@@ -17252,14 +17253,13 @@
 		        fontSize: 10,
 		        font: "helvetica", // helvetica, times, courier
 		        lineColor: 200,
-		        lineWidth: 0.1,
+		        lineWidth: 0,
 		        fontStyle: 'normal', // normal, bold, italic, bolditalic
 		        overflow: 'ellipsize', // visible, hidden, ellipsize or linebreak
-		        fillColor: 255,
+		        fillColor: false, // Either false for transparant, rbg array e.g. [255, 255, 255] or gray level e.g 200
 		        textColor: 20,
 		        halign: 'left', // left, center, right
 		        valign: 'top', // top, middle, bottom
-		        fillStyle: 'F', // 'S', 'F' or 'DF' (stroke, fill or fill then stroke)
 		        rowHeight: 20,
 		        columnWidth: 'auto'
 		    };
@@ -18974,8 +18974,6 @@
 
 		var doc;
 		var cursor;
-		var styleModifiers;
-		var pageSize;
 		var settings;
 		var table;
 		// The current Table instance
@@ -18985,24 +18983,14 @@
 		 *
 		 * @param {Object[]|String[]} headers Either as an array of objects or array of strings
 		 * @param {Object[][]|String[][]} data Either as an array of objects or array of strings
-		 * @param {Object} [options={}] Options that will override the default ones
+		 * @param {Object} [userOptions={}] Options that will override the default ones
 		 */
-		jsPDF.API.autoTable = function (headers, data, options) {
-		    validateInput(headers, data, options);
+		jsPDF.API.autoTable = function (headers, data) {
+		    var userOptions = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
+
+		    validateInput(headers, data, userOptions);
 		    doc = this;
-
-		    pageSize = doc.internal.pageSize;
-		    styleModifiers = {
-		        fillColor: doc.setFillColor,
-		        textColor: doc.setTextColor,
-		        fontStyle: doc.setFontStyle,
-		        lineColor: doc.setDrawColor,
-		        lineWidth: doc.setLineWidth,
-		        font: doc.setFont,
-		        fontSize: doc.setFontSize
-		    };
-
-		    settings = Config.initSettings(options || {});
+		    settings = Config.initSettings(userOptions);
 
 		    // Need a cursor y as it needs to be reset after each page (row.y can't do that)
 		    // Also prefer cursor to column.x as the cursor is easier to modify in the hooks
@@ -19019,7 +19007,7 @@
 
 		    // Create the table model with its columns, rows and cells
 		    createModels(headers, data);
-		    calculateWidths(this, pageSize.width);
+		    calculateWidths(this, doc.internal.pageSize.width);
 
 		    // Page break if there is room for only the first data row
 		    var firstRowHeight = table.rows[0] && settings.pageBreak === 'auto' ? table.rows[0].height : 0;
@@ -19027,7 +19015,8 @@
 		    if (settings.pageBreak === 'avoid') {
 		        minTableBottomPos += table.height;
 		    }
-		    if (settings.pageBreak === 'always' && settings.startY !== false || settings.startY !== false && minTableBottomPos > pageSize.height) {
+		    var pageHeight = doc.internal.pageSize.height;
+		    if (settings.pageBreak === 'always' && settings.startY !== false || settings.startY !== false && minTableBottomPos > pageHeight) {
 		        this.addPage(this.addPage);
 		        cursor.y = settings.margin.top;
 		    }
@@ -19121,10 +19110,6 @@
 
 		/**
 		 * Add a new page including an autotable header etc. Use this function in the hooks.
-		 *
-		 * @param tableElem Html table element
-		 * @param includeHiddenElements If to include hidden rows and columns (defaults to false)
-		 * @returns Object Object with two properties, columns and rows
 		 */
 		jsPDF.API.autoTableAddPage = function () {
 		    addPage(doc.addPage);
@@ -19383,6 +19368,7 @@
 		function addPage(jspdfAddPage) {
 		    settings.afterPageContent(hooksData());
 		    jspdfAddPage();
+		    settings.afterPageAdd(hooksData());
 		    table.pageCount++;
 		    cursor = { x: settings.margin.left, y: settings.margin.top };
 		    settings.beforePageContent(hooksData());
@@ -19396,7 +19382,7 @@
 		 */
 		function isNewPage(rowHeight) {
 		    var afterRowPos = cursor.y + rowHeight + settings.margin.bottom;
-		    return afterRowPos >= pageSize.height;
+		    return afterRowPos >= doc.internal.pageSize.height;
 		}
 
 		function printRows(jspdfAddPage) {
@@ -19461,7 +19447,10 @@
 
 		        var data = hooksData({ column: column, row: row });
 		        if (hookHandler(cell, data) !== false) {
-		            doc.rect(cell.x, cell.y, cell.width, cell.height, cell.styles.fillStyle);
+		            var fillStyle = getFillStyle(cell.styles);
+		            if (fillStyle) {
+		                doc.rect(cell.x, cell.y, cell.width, cell.height, fillStyle);
+		            }
 		            doc.autoTableText(cell.text, cell.textPos.x, cell.textPos.y, {
 		                halign: cell.styles.halign,
 		                valign: cell.styles.valign
@@ -19473,7 +19462,30 @@
 		    cursor.y += row.height;
 		}
 
+		function getFillStyle(styles) {
+		    var drawLine = styles.lineWidth > 0;
+		    var drawBackground = styles.fillColor !== false;
+		    if (drawLine && drawBackground) {
+		        return 'DF'; // Fill then stroke
+		    } else if (drawLine) {
+		            return 'S'; // Only stroke (transperant backgorund)
+		        } else if (drawBackground) {
+		                return 'F'; // Only fill, no stroke
+		            } else {
+		                    return false;
+		                }
+		}
+
 		function applyStyles(styles) {
+		    var styleModifiers = {
+		        fillColor: doc.setFillColor,
+		        textColor: doc.setTextColor,
+		        fontStyle: doc.setFontStyle,
+		        lineColor: doc.setDrawColor,
+		        lineWidth: doc.setLineWidth,
+		        font: doc.setFont,
+		        fontSize: doc.setFontSize
+		    };
 		    Object.keys(styleModifiers).forEach(function (name) {
 		        var style = styles[name];
 		        var modifier = styleModifiers[name];
