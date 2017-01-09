@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "description": "Website for the jspdf-autotable plugin http://github.com/simonbengtsson/jspdf-autotable",
+  "dependencies": {
+    "jspdf-autotable": "github:simonbengtsson/jspdf-autotable#master"
+  },
+  "devDependencies": {
+    "ncp": "^2.0.0"
+  },
+  "scripts": {
+    "build": "npm update && ncp node_modules/jspdf-autotable/examples ."
+  }
+}
