@@ -64,17 +64,17 @@ examples.long = function () {
         columnStyles: {text: {columnWidth: 'auto'}}
     });
 
-    doc.text("Overflow 'hidden'", 7, doc.autoTableEndPosY() + 10);
+    doc.text("Overflow 'hidden'", 7, doc.autoTable.previous.finalY + 10);
     doc.autoTable(columnsLong, getData(), {
-        startY: doc.autoTableEndPosY() + 15,
+        startY: doc.autoTable.previous.finalY + 15,
         margin: {horizontal: 7},
         styles: {overflow: 'hidden', columnWidth: 'wrap'},
         columnStyles: {text: {columnWidth: 'auto'}}
     });
 
-    doc.text("Overflow 'linebreak'", 7, doc.autoTableEndPosY() + 10);
+    doc.text("Overflow 'linebreak'", 7, doc.autoTable.previous.finalY  + 10);
     doc.autoTable(columnsLong, getData(3), {
-        startY: doc.autoTableEndPosY() + 15,
+        startY: doc.autoTable.previous.finalY + 15,
         margin: {horizontal: 7},
         bodyStyles: {valign: 'top'},
         styles: {overflow: 'linebreak', columnWidth: 'wrap'},
@@ -99,7 +99,7 @@ examples.content = function () {
     cols.splice(0, 2);
     doc.autoTable(cols, getData(40), {startY: 50, showHeader: 'firstPage'});
 
-    doc.text(text, 14, doc.autoTableEndPosY() + 10);
+    doc.text(text, 14, doc.autoTable.previous.finalY + 10);
 
     return doc;
 };
@@ -125,7 +125,7 @@ examples.multiple = function () {
 
     for (var j = 0; j < 6; j++) {
         doc.autoTable(getColumns(), getData(9), {
-            startY: doc.autoTableEndPosY() + 10,
+            startY: doc.autoTable.previous.finalY + 10,
             pageBreak: 'avoid',
         });
     }
@@ -181,13 +181,47 @@ examples['header-footer'] = function () {
     return doc;
 };
 
+// Minimal - shows how compact tables can be drawn
+examples.defaults = function () {
+    // Global defaults
+    jsPDF.autoTableSetDefaults({
+        columnStyles: {id: {fontStyle: 'bold'}},
+        headerStyles: {fillColor: 0},
+    });
+    
+    var doc = new jsPDF();
+    
+    // Document defaults
+    doc.autoTableSetDefaults({
+        headerStyles: {fillColor: [155, 89, 182]}, // Purple
+        margin: {top: 25},
+        addPageContent: function(data) {
+            doc.setFontSize(20);
+            doc.text('Document specific header', data.settings.margin.left, 20);
+        }
+    });
+    
+    doc.autoTable(getColumns(), getData());
+    
+    doc.addPage();
+    
+    doc.autoTable(getColumns(), getData(), {
+        // Will override document and global headerStyles
+        headerStyles: {fillColor: [231, 76, 60]} // Red
+    });
+    
+    // Reset defaults
+    doc.autoTableSetDefaults(null);
+    jsPDF.autoTableSetDefaults(null);
+    
+    return doc;
+};
+
 // Horizontal - shows how tables can be drawn with horizontal headers
 examples.horizontal = function () {
     var doc = new jsPDF();
     doc.autoTable(getColumns().splice(1, 4), getData(), {
-        drawHeaderRow: function() {
-            return false; // Don't draw header row
-        },
+        showHeader: 'never',
         columnStyles: {
             name: {fillColor: [41, 128, 185], textColor: 255, fontStyle: 'bold'}
         }
@@ -264,11 +298,11 @@ examples.themes = function () {
     doc.text('Theme "striped"', 14, 16);
     doc.autoTable(getColumns(), getData(), {startY: 20});
 
-    doc.text('Theme "grid"', 14, doc.autoTableEndPosY() + 10);
-    doc.autoTable(getColumns(), getData(), {startY: doc.autoTableEndPosY() + 14, theme: 'grid'});
+    doc.text('Theme "grid"', 14, doc.autoTable.previous.finalY + 10);
+    doc.autoTable(getColumns(), getData(), {startY: doc.autoTable.previous.finalY + 14, theme: 'grid'});
 
-    doc.text('Theme "plain"', 14, doc.autoTableEndPosY() + 10);
-    doc.autoTable(getColumns(), getData(), {startY: doc.autoTableEndPosY() + 14, theme: 'plain'});
+    doc.text('Theme "plain"', 14, doc.autoTable.previous.finalY + 10);
+    doc.autoTable(getColumns(), getData(), {startY: doc.autoTable.previous.finalY + 14, theme: 'plain'});
 
     return doc;
 };
