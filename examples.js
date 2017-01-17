@@ -167,7 +167,7 @@ examples['header-footer'] = function () {
         doc.setFontSize(10);
         doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 10);
     };
-    
+
     doc.autoTable(getColumns(), getData(40), {
         addPageContent: pageContent,
         margin: {top: 30}
@@ -188,9 +188,9 @@ examples.defaults = function () {
         columnStyles: {id: {fontStyle: 'bold'}},
         headerStyles: {fillColor: 0},
     });
-    
+
     var doc = new jsPDF();
-    
+
     // Document defaults
     doc.autoTableSetDefaults({
         headerStyles: {fillColor: [155, 89, 182]}, // Purple
@@ -200,20 +200,20 @@ examples.defaults = function () {
             doc.text('Document specific header', data.settings.margin.left, 20);
         }
     });
-    
+
     doc.autoTable(getColumns(), getData());
-    
+
     doc.addPage();
-    
+
     doc.autoTable(getColumns(), getData(), {
         // Will override document and global headerStyles
         headerStyles: {fillColor: [231, 76, 60]} // Red
     });
-    
+
     // Reset defaults
     doc.autoTableSetDefaults(null);
     jsPDF.autoTableSetDefaults(null);
-    
+
     return doc;
 };
 
@@ -335,17 +335,17 @@ examples.custom = function () {
             }
         },
         /*parsedInput: function (cell, data) {
-            if (data.column.dataKey === 'expenses') {
-                cell.styles.halign = 'right';
-                if (cell.raw > 600) {
-                    cell.styles.textColor = [255, 100, 100];
-                    cell.styles.fontStyle = 'bolditalic';
-                }
-                cell.text = '$' + cell.text;
-            } else if (data.column.dataKey === 'name') {
-                cell.text = cell.raw.split(' ')[0]; // only first name
-            }
-        }*/
+         if (data.column.dataKey === 'expenses') {
+         cell.styles.halign = 'right';
+         if (cell.raw > 600) {
+         cell.styles.textColor = [255, 100, 100];
+         cell.styles.fontStyle = 'bolditalic';
+         }
+         cell.text = '$' + cell.text;
+         } else if (data.column.dataKey === 'name') {
+         cell.text = cell.raw.split(' ')[0]; // only first name
+         }
+         }*/
     });
     return doc;
 };
@@ -396,7 +396,7 @@ function shuffleSentence(words) {
 }
 
 imgToBase64('document.jpg', function(base64) {
-    base64Img = base64; 
+    base64Img = base64;
 });
 
 // You could either use a function similar to this or pre convert an image with for example http://dopiaza.org/tools/datauri
