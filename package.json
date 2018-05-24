@@ -5,9 +5,9 @@
     "jspdf-autotable": "github:simonbengtsson/jspdf-autotable#master"
   },
   "devDependencies": {
-    "ncp": "^2.0.0"
+    "ncp": "2.0.0"
   },
   "scripts": {
-    "build": "npm update && ncp node_modules/jspdf-autotable/examples ."
+    "build": "npm i && ncp node_modules/jspdf-autotable/examples ."
   }
 }
