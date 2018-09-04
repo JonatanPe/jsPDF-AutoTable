@@ -155,7 +155,7 @@ jsPDF.API.autoTableHtmlToJson = function (tableElem, includeHiddenElements) {
  * Improved text function with halign and valign support
  * Inspiration from: http://stackoverflow.com/questions/28327510/align-text-right-using-jspdf/28433113#28433113
  */
-jsPDF.API.autoTableText = function (text, x, y, styles) {
+jsPDF.API.autoTableText = function (text, x, y, styles, extra) {
     if (typeof x !== 'number' || typeof y !== 'number') {
         console.error('The x and y parameters are required. Missing for the text: ', text);
     }
@@ -194,7 +194,7 @@ jsPDF.API.autoTableText = function (text, x, y, styles) {
         x -= this.getStringUnitWidth(text) * alignSize;
     }
 
-    this.text(text, x, y);
+    this.text(text, x, y, extra);
 
     return this;
 };

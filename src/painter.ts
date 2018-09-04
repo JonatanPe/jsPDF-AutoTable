@@ -129,7 +129,7 @@ export function printRow(row, drawRowHooks, drawCellHooks) {
             table.doc.autoTableText(cell.text, cell.textPos.x, cell.textPos.y, {
                 halign: cell.styles.halign,
                 valign: cell.styles.valign
-            });
+            }, cell.styles.extra);
         }
         
         table.cursor.x += cell.width;
