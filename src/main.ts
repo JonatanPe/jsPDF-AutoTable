@@ -186,7 +186,7 @@ jsPDF.API.autoTableText = function (text, x, y, styles, extra) {
 
         if (lineCount >= 1) {
             for (let iLine = 0; iLine < splitText.length; iLine++) {
-                this.text(splitText[iLine], x - this.getStringUnitWidth(splitText[iLine]) * alignSize, y);
+                this.text(splitText[iLine], x - this.getStringUnitWidth(splitText[iLine]) * alignSize, y, extra);
                 y += fontSize;
             }
             return this;
